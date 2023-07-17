@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Size;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.Toast;
@@ -29,7 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
-    ImageButton capture, toggleFlash, flipCamera;
+    ImageButton capture, toggleFlash;
     private PreviewView previewView;
     int cameraFacing = CameraSelector.LENS_FACING_BACK;
     private final ActivityResultLauncher<String> activityResultLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), new ActivityResultCallback<Boolean>() {
@@ -45,10 +46,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        //FIXME: المتغير  previewView يعطيني طول و ارتفاع مختلف عما اريد 300*100 و القيمة التي يعطيني اياها 788*263
         previewView = findViewById(R.id.cameraPreview);
         capture = findViewById(R.id.capture);
         toggleFlash = findViewById(R.id.toggleFlash);
-        flipCamera = findViewById(R.id.flipCamera);
 
         if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             activityResultLauncher.launch(Manifest.permission.CAMERA);
@@ -56,21 +57,11 @@ public class MainActivity extends AppCompatActivity {
             startCamera(cameraFacing);
         }
 
-        flipCamera.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (cameraFacing == CameraSelector.LENS_FACING_BACK) {
-                    cameraFacing = CameraSelector.LENS_FACING_FRONT;
-                } else {
-                    cameraFacing = CameraSelector.LENS_FACING_BACK;
-                }
-                startCamera(cameraFacing);
-            }
-        });
     }
 
     public void startCamera(int cameraFacing) {
         int aspectRatio = aspectRatio(previewView.getWidth(), previewView.getHeight());
+        Size resolutionSize = new Size(previewView.getWidth(), previewView.getHeight());
         ListenableFuture<ProcessCameraProvider> listenableFuture = ProcessCameraProvider.getInstance(this);
 
         listenableFuture.addListener(() -> {
@@ -80,7 +71,9 @@ public class MainActivity extends AppCompatActivity {
                 Preview preview = new Preview.Builder().setTargetAspectRatio(aspectRatio).build();
 
                 ImageCapture imageCapture = new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .setTargetRotation(getWindowManager().getDefaultDisplay().getRotation()).build();
+                        .setTargetRotation(getWindowManager().getDefaultDisplay().getRotation())
+                        .setTargetResolution(new Size(300, 100))
+                        .build();
 
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                         .requireLensFacing(cameraFacing).build();
@@ -88,7 +81,6 @@ public class MainActivity extends AppCompatActivity {
                 cameraProvider.unbindAll();
 
                 Camera camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
-
                 capture.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {

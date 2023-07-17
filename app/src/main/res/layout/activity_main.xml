@@ -8,8 +8,9 @@
 
     <androidx.camera.view.PreviewView
         android:id="@+id/cameraPreview"
-        android:layout_height="100dp"
-        android:layout_width="300dp"
+        android:background="@drawable/rectangle_with_corner_shape"
+        android:layout_height="160px"
+        android:layout_width="480px"
         android:layout_centerHorizontal="true"
         android:layout_centerVertical="true"/>
 
