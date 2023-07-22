@@ -4,6 +4,9 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
+import android.content.ContentValues;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Bundle;
 import android.Manifest;
 import android.content.Context;
@@ -24,6 +27,7 @@ import android.media.ImageReader;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -38,13 +42,20 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+
+import android.media.MediaActionSound;
+
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "AndroidCameraApi";
+    private Surface textureFullSurface;
     private Button takePictureButton;
-    private TextureView textureView;
+    private TextureView textureView ,textureViewFull;
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
     static {
         ORIENTATIONS.append(Surface.ROTATION_0, 90);
@@ -64,13 +75,24 @@ public class MainActivity extends AppCompatActivity {
     private boolean mFlashSupported;
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
+
+    private MediaActionSound mediaActionSound;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         textureView = (TextureView) findViewById(R.id.texture);
+        textureViewFull = (TextureView) findViewById(R.id.texture_full);
+        // Initialize the MediaActionSound
+        mediaActionSound = new MediaActionSound();
+
         assert textureView != null;
         textureView.setSurfaceTextureListener(textureListener);
+
+        assert textureViewFull != null;
+        textureViewFull.setSurfaceTextureListener(fullTextureListener);
+
         takePictureButton = (Button) findViewById(R.id.btn_takepicture);
         assert takePictureButton != null;
         takePictureButton.setOnClickListener(new View.OnClickListener() {
@@ -80,6 +102,29 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+    TextureView.SurfaceTextureListener fullTextureListener = new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+            // SurfaceTexture is available, open the camera and create capture session
+            openCamera();
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+            // TextureView size changed, handle accordingly if needed
+        }
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+            return false;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+            // TextureView frame updated, handle accordingly if needed
+        }
+    };
+
     TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
@@ -160,6 +205,13 @@ public class MainActivity extends AppCompatActivity {
             ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
             List<Surface> outputSurfaces = new ArrayList<Surface>(2);
             outputSurfaces.add(reader.getSurface());
+            // Use the texture_full TextureView as an additional output surface
+            SurfaceTexture textureFull = textureViewFull.getSurfaceTexture();
+            assert textureFull != null;
+            textureFull.setDefaultBufferSize(width, height);
+            textureFullSurface = new Surface(textureFull);
+            outputSurfaces.add(textureFullSurface);
+
             outputSurfaces.add(new Surface(textureView.getSurfaceTexture()));
             final CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureBuilder.addTarget(reader.getSurface());
@@ -178,6 +230,7 @@ public class MainActivity extends AppCompatActivity {
                         byte[] bytes = new byte[buffer.capacity()];
                         buffer.get(bytes);
                         save(bytes);
+                        playShutterSound();
                     } catch (FileNotFoundException e) {
                         e.printStackTrace();
                     } catch (IOException e) {
@@ -188,17 +241,41 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
+                private void playShutterSound() {
+                    try {
+                        // Play the shutter sound using MediaActionSound
+                        mediaActionSound.play(MediaActionSound.SHUTTER_CLICK);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
                 private void save(byte[] bytes) throws IOException {
                     OutputStream output = null;
                     try {
+                        File equationCamDir = new File(Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_PICTURES), "EquationCam");
+
+                        if (!equationCamDir.exists()) {
+                            equationCamDir.mkdirs();
+                        }
+
+                        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+                        File file = new File(equationCamDir, "IMG_" + timeStamp + ".jpg");
+
                         output = new FileOutputStream(file);
                         output.write(bytes);
+
+                        // Add the image to the device's media store for it to be visible in the gallery
+                        MediaScannerConnection.scanFile(MainActivity.this, new String[]{file.getPath()}, null, null);
+
+                        Toast.makeText(MainActivity.this, "Saved: " + file.getPath(), Toast.LENGTH_SHORT).show();
                     } finally {
                         if (null != output) {
                             output.close();
                         }
                     }
                 }
+
             };
             reader.setOnImageAvailableListener(readerListener, mBackgroundHandler);
             final CameraCaptureSession.CaptureCallback captureListener = new CameraCaptureSession.CaptureCallback() {
@@ -320,6 +397,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         Log.e(TAG, "onPause");
+        // Release the MediaActionSound resources
+        if (mediaActionSound != null) {
+            mediaActionSound.release();
+            mediaActionSound = null;
+        }
         //closeCamera();
         stopBackgroundThread();
         super.onPause();
