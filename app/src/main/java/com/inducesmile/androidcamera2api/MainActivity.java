@@ -51,11 +51,12 @@ import java.util.Locale;
 
 import android.media.MediaActionSound;
 
+import com.inducesmile.androidcamera2api.R;
+
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "AndroidCameraApi";
-    private Surface textureFullSurface;
     private Button takePictureButton;
-    private TextureView textureView ,textureViewFull;
+    private TextureView textureView ,textureViewFull ;
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
     static {
         ORIENTATIONS.append(Surface.ROTATION_0, 90);
@@ -83,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         textureView = (TextureView) findViewById(R.id.texture);
-        textureViewFull = (TextureView) findViewById(R.id.texture_full);
+        textureViewFull= (TextureView) findViewById(R.id.texture_full);
         // Initialize the MediaActionSound
         mediaActionSound = new MediaActionSound();
 
@@ -91,8 +92,7 @@ public class MainActivity extends AppCompatActivity {
         textureView.setSurfaceTextureListener(textureListener);
 
         assert textureViewFull != null;
-        textureViewFull.setSurfaceTextureListener(fullTextureListener);
-
+        textureViewFull.setSurfaceTextureListener(textureFullListener);
         takePictureButton = (Button) findViewById(R.id.btn_takepicture);
         assert takePictureButton != null;
         takePictureButton.setOnClickListener(new View.OnClickListener() {
@@ -102,30 +102,26 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-    TextureView.SurfaceTextureListener fullTextureListener = new TextureView.SurfaceTextureListener() {
+    TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-            // SurfaceTexture is available, open the camera and create capture session
+            //open your camera here
             openCamera();
         }
-
         @Override
         public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-            // TextureView size changed, handle accordingly if needed
+            // Transform you image captured size according to the surface width and height
         }
-
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
             return false;
         }
-
         @Override
         public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-            // TextureView frame updated, handle accordingly if needed
         }
     };
 
-    TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
+    TextureView.SurfaceTextureListener textureFullListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
             //open your camera here
@@ -205,13 +201,6 @@ public class MainActivity extends AppCompatActivity {
             ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
             List<Surface> outputSurfaces = new ArrayList<Surface>(2);
             outputSurfaces.add(reader.getSurface());
-            // Use the texture_full TextureView as an additional output surface
-            SurfaceTexture textureFull = textureViewFull.getSurfaceTexture();
-            assert textureFull != null;
-            textureFull.setDefaultBufferSize(width, height);
-            textureFullSurface = new Surface(textureFull);
-            outputSurfaces.add(textureFullSurface);
-
             outputSurfaces.add(new Surface(textureView.getSurfaceTexture()));
             final CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureBuilder.addTarget(reader.getSurface());
@@ -309,9 +298,16 @@ public class MainActivity extends AppCompatActivity {
             assert texture != null;
             texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
             Surface surface = new Surface(texture);
+
+            SurfaceTexture textureFull = textureViewFull.getSurfaceTexture();
+            assert textureViewFull != null;
+            texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
+            Surface surfaceFull = new Surface(textureFull);
+
             captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             captureRequestBuilder.addTarget(surface);
-            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback(){
+            captureRequestBuilder.addTarget(surfaceFull);
+            cameraDevice.createCaptureSession(Arrays.asList(surface,surfaceFull), new CameraCaptureSession.StateCallback(){
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                     //The camera is already closed
